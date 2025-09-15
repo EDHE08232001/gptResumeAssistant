@@ -1,0 +1,17 @@
+# no pip venv files
+venv/
+env/
+
+# no python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# no shitty systen generated files
+.DS_Store
+Thumbs.db
+._*
+
+# ignore secrets files
+.env
+secrets.json
