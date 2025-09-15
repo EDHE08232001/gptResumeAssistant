@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
-from gptAssistant import generate_reply
+from src.gptAssistant import generate_reply
 import asyncio
 
 app = FastAPI(title="GPT Resume Assistant API")
