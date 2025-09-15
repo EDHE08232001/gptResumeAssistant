@@ -51,7 +51,7 @@ def generate_reply(messages: List[Dict[str, str]]) -> str:
     )
 
     completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",  # Use a valid model name
+        model="gpt-5-nano",  # Use a valid model name
         messages=[{"role": "system", "content": system_prompt}] + messages
     )
     return completion.choices[0].message.content
