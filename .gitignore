@@ -22,3 +22,9 @@ secrets.json
 # no hidden folders and files
 .*
 .*/
+
+# ignore deploy
+deploy/
+
+# ignore zip
+*.zip
