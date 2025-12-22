@@ -1,11 +1,35 @@
 # ./RAG/build_resume_index.py
-import os, json, hashlib, re
+import json
+import hashlib
+import re
+import os
 from pathlib import Path
+from typing import List
+
 import numpy as np
 from openai import OpenAI
+from dotenv import load_dotenv
 
+# ---------------------------------------------------------------------
+# Environment
+# ---------------------------------------------------------------------
+load_dotenv()
+
+API_KEY = os.getenv("OPENAI_API_KEY")
+if not API_KEY:
+    raise RuntimeError(
+        "OPENAI_API_KEY is not set. "
+        "Add it to a .env file or export it in your shell."
+    )
+
+client = OpenAI(api_key=API_KEY)
+
+# ---------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
+
 RESUME_MD = PROJECT_ROOT / "public" / "Edward_He_s_Resume.md"
 
 OUT_DIR = BASE_DIR
@@ -13,10 +37,15 @@ CHUNKS_JSON = OUT_DIR / "resume_chunks.json"
 VECTORS_NPY = OUT_DIR / "resume_vectors.npy"
 META_JSON = OUT_DIR / "resume_meta.json"
 
-EMBED_MODEL = "text-embedding-3-small"  # strong + cheap default :contentReference[oaicite:2]{index=2}
+# ---------------------------------------------------------------------
+# Embedding config
+# ---------------------------------------------------------------------
+EMBED_MODEL = "text-embedding-3-small"  # strong, cheap, stable
+EMBED_BATCH_SIZE = 64                  # safe default
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
 def file_sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -25,18 +54,19 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 def normalize(text: str) -> str:
-    # collapse excessive whitespace while preserving structure
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
-def chunk_markdown(md: str, max_chars: int = 1800, overlap_chars: int = 250) -> list[str]:
+def chunk_markdown(
+    md: str,
+    max_chars: int = 1800,
+    overlap_chars: int = 250,
+) -> List[str]:
     """
-    Simple, robust chunker:
-      1) split on blank lines (paragraph-ish)
-      2) pack into chunks up to max_chars
-      3) add small character overlap for continuity
+    Paragraph-based chunker with light overlap.
+    Stable, predictable, resume-safe.
     """
     blocks = [b.strip() for b in md.split("\n\n") if b.strip()]
     chunks = []
@@ -46,62 +76,82 @@ def chunk_markdown(md: str, max_chars: int = 1800, overlap_chars: int = 250) -> 
         if not cur:
             cur = b
             continue
+
         if len(cur) + 2 + len(b) <= max_chars:
             cur += "\n\n" + b
         else:
             chunks.append(cur)
-            # overlap tail
             tail = cur[-overlap_chars:] if overlap_chars > 0 else ""
             cur = (tail + "\n\n" + b).strip()
 
     if cur:
         chunks.append(cur)
 
-    # final cleanup
     return [normalize(c) for c in chunks if c.strip()]
 
-def embed_texts(texts: list[str]) -> np.ndarray:
+def embed_texts(texts: List[str]) -> np.ndarray:
     """
-    Batches embeddings and returns float32 matrix [n, d].
+    Batched embedding → float32 matrix [n, d]
     """
-    resp = client.embeddings.create(
-        model=EMBED_MODEL,
-        input=texts,
-    )
-    vectors = np.array([item.embedding for item in resp.data], dtype=np.float32)
+    all_vectors = []
+
+    for i in range(0, len(texts), EMBED_BATCH_SIZE):
+        batch = texts[i : i + EMBED_BATCH_SIZE]
+        resp = client.embeddings.create(
+            model=EMBED_MODEL,
+            input=batch,
+        )
+        all_vectors.extend(item.embedding for item in resp.data)
+
+    vectors = np.asarray(all_vectors, dtype=np.float32)
     return vectors
 
-def main():
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+def main() -> None:
     if not RESUME_MD.exists():
-        raise FileNotFoundError(f"Missing resume: {RESUME_MD}")
+        raise FileNotFoundError(f"Missing resume file: {RESUME_MD}")
 
-    md = normalize(RESUME_MD.read_text(encoding="utf-8"))
+    md_raw = RESUME_MD.read_text(encoding="utf-8")
+    md = normalize(md_raw)
     chunks = chunk_markdown(md)
 
-    print(f"Resume chars: {len(md):,}")
-    print(f"Chunks: {len(chunks)}")
+    print(f"[INFO] Resume characters : {len(md):,}")
+    print(f"[INFO] Chunks generated  : {len(chunks)}")
 
     vectors = embed_texts(chunks)
-    # L2-normalize once so cosine similarity becomes dot-product
+
+    # L2 normalize once → cosine similarity == dot product
     norms = np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-12
     vectors = vectors / norms
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    CHUNKS_JSON.write_text(json.dumps(chunks, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Persist chunks
+    CHUNKS_JSON.write_text(
+        json.dumps(chunks, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     np.save(VECTORS_NPY, vectors)
 
+    # Metadata (deterministic + audit-friendly)
     meta = {
         "source_file": str(RESUME_MD),
         "source_sha256": file_sha256(RESUME_MD),
         "embed_model": EMBED_MODEL,
         "num_chunks": len(chunks),
         "vector_dim": int(vectors.shape[1]),
+        "chunk_sha256": [
+            hashlib.sha256(c.encode("utf-8")).hexdigest() for c in chunks
+        ],
     }
+
     META_JSON.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    print(f"Wrote: {CHUNKS_JSON}")
-    print(f"Wrote: {VECTORS_NPY}")
-    print(f"Wrote: {META_JSON}")
+    print(f"[OK] Wrote {CHUNKS_JSON}")
+    print(f"[OK] Wrote {VECTORS_NPY}")
+    print(f"[OK] Wrote {META_JSON}")
 
 if __name__ == "__main__":
     main()

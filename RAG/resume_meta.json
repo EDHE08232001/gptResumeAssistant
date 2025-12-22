@@ -1,0 +1,13 @@
+{
+  "source_file": "/Volumes/EH_T7SSD/gptResumeAssistant/public/Edward_He_s_Resume.md",
+  "source_sha256": "2756859d60e38f6fb58c36f9321cd2dfbcabae392801c00b106434e88c050783",
+  "embed_model": "text-embedding-3-small",
+  "num_chunks": 4,
+  "vector_dim": 1536,
+  "chunk_sha256": [
+    "b0035d228a6e8ac90318eb6dfdd1d6069ce0076b10262b2ec91cce212df39681",
+    "9f59d748a1270d6fe46d3a4e2b5d8bc07b01ea74f1cb1cf9ea37d2098f216236",
+    "d2f0a820c2707558776ae1ea397acc5f12383f181a20484f44bb8ec1a46729bc",
+    "7a93d31b72902af3224e4c52d1162ebbf523e88ca3572b103ae416392286fedc"
+  ]
+}
