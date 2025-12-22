@@ -9,6 +9,10 @@ import os, pathlib
 from openai import OpenAI
 from PyPDF2 import PdfReader
 
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # --- Load API key and create client ---
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
