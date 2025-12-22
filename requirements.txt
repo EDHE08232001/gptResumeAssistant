@@ -9,24 +9,21 @@ gunicorn>=21.2.0         # Production process manager
 # Environment & HTTP
 # ===============================
 python-dotenv>=1.0.1
-openai>=1.107.2          # Required by langchain-openai
-httpx>=0.28.1            # Keep aligned with OpenAI SDK
+openai>=1.107.2          # OpenAI Responses + Embeddings API
+httpx>=0.28.1            # Required by OpenAI SDK
 httpcore>=1.0.9
+
+# ===============================
+# RAG Core (Vector Math)
+# ===============================
+numpy>=1.26.4            # Vector storage + cosine similarity
 
 # ===============================
 # Document Processing
 # ===============================
-PyPDF2>=3.0.1            # PDF text extraction
-# (Text + Markdown handled natively by LangChain loaders)
+PyPDF2>=3.0.1            # PDF text extraction (optional fallback)
 
 # ===============================
-# RAG / LangChain Stack
+# Optional UI (only if needed)
 # ===============================
-langchain>=0.3.0
-langchain-community>=0.3.0
-langchain-openai>=0.3.0
-
-# ===============================
-# Vector Database (Apple Silicon safe)
-# ===============================
-faiss-cpu>=1.8.0
+# gradio>=4.0.0
