@@ -107,7 +107,7 @@ def embed_texts(texts: List[str]) -> np.ndarray:
     return vectors
 
 # ---------------------------------------------------------------------
-# Main
+# Main Function
 # ---------------------------------------------------------------------
 def main() -> None:
     if not RESUME_MD.exists():
