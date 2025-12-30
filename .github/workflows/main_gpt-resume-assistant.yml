@@ -1,9 +1,17 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
+# ------------------------------------------------------------
+# GitHub Actions workflow file
+# Location: .github/workflows/<anything>.yml
+# Purpose: On push to main (or manual trigger), build and deploy
+#          the app to Azure Web App.
+# ------------------------------------------------------------
 
 name: Build and deploy Python app to Azure Web App - gpt-resume-assistant
 
+# ------------------------------------------------------------
+# "on" defines what EVENTS trigger this workflow.
+# - push: run on git pushes to specific branches
+# - workflow_dispatch: allow manual run from GitHub UI
+# ------------------------------------------------------------
 on:
   push:
     branches:
@@ -11,55 +19,91 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ----------------------------------------------------------
+  # JOB 1: build
+  # - A job is a set of steps executed on a runner VM.
+  # - "runs-on" specifies the GitHub-hosted runner image.
+  # - "permissions" controls what this job can access in GitHub.
+  # ----------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read # Needed for actions/checkout to read your repo
 
     steps:
+      # --------------------------------------------------------
+      # Step: actions/checkout
+      # - Downloads your repository code into the runner so
+      #   subsequent steps can use it.
+      # --------------------------------------------------------
       - uses: actions/checkout@v4
 
+      # --------------------------------------------------------
+      # Step: actions/setup-python
+      # - Installs and activates the requested Python version
+      #   on the runner.
+      # - This affects CI/build/test steps executed in this job.
+      # --------------------------------------------------------
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'   # <-- Updated from 3.10 to 3.12
 
-      # 🛠️ Local Build Section (Optional)
-      # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
+      # --------------------------------------------------------
+      # Step: Local build / dependency install (optional)
+      # - Creates a venv and installs dependencies.
+      # - This catches dependency / build issues early in CI.
+      # - Note: You are NOT uploading the venv (excluded later).
+      # --------------------------------------------------------
       - name: Create and Start virtual environment and Install dependencies
         run: |
           python -m venv antenv
           source antenv/bin/activate
           pip install -r requirements.txt
-                
-      # By default, when you enable GitHub CI/CD integration through the Azure portal, the platform automatically sets the SCM_DO_BUILD_DURING_DEPLOYMENT application setting to true. This triggers the use of Oryx, a build engine that handles application compilation and dependency installation (e.g., pip install) directly on the platform during deployment. Hence, we exclude the antenv virtual environment directory from the deployment artifact to reduce the payload size. 
+
+      # --------------------------------------------------------
+      # Step: Upload artifact
+      # - Artifacts are files/folders saved from one job and used
+      #   in another job (here: build -> deploy).
+      # - You upload the repo contents "." but exclude "antenv/"
+      #   to keep the artifact smaller.
+      # --------------------------------------------------------
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
-          name: python-app
+          name: python-app              # Artifact name (used in download step)
           path: |
             .
             !antenv/
 
-      # 🚫 Opting Out of Oryx Build
-      # If you prefer to disable the Oryx build process during deployment, follow these steps:
-      # 1. Remove the SCM_DO_BUILD_DURING_DEPLOYMENT app setting from your Azure App Service Environment variables.
-      # 2. Refer to sample workflows for alternative deployment strategies: https://github.com/Azure/actions-workflow-samples/tree/master/AppService
-      
-
+  # ----------------------------------------------------------
+  # JOB 2: deploy
+  # - "needs: build" means this job runs ONLY after build succeeds.
+  # - Permissions include id-token:write for Azure federated login (OIDC).
+  # ----------------------------------------------------------
   deploy:
     runs-on: ubuntu-latest
     needs: build
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write   # Allows requesting an OIDC token for azure/login
+      contents: read    # Sometimes required by actions (safe to keep)
 
     steps:
+      # --------------------------------------------------------
+      # Step: Download artifact created in build job
+      # - Pulls "python-app" artifact into the runner workspace.
+      # --------------------------------------------------------
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
-      
+
+      # --------------------------------------------------------
+      # Step: Login to Azure
+      # - Authenticates this workflow to your Azure subscription.
+      # - Uses secrets created when you configured Azure <-> GitHub.
+      # - This is typically OIDC-based (no passwords in the workflow).
+      # --------------------------------------------------------
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -67,10 +111,15 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_426542A1423B4423BB470BA1A1C7084E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3396AD537647494698F245F491E0FE8F }}
 
-      - name: 'Deploy to Azure Web App'
+      # --------------------------------------------------------
+      # Step: Deploy to Azure Web App
+      # - Pushes the artifact content to your App Service.
+      # - app-name must match your Azure Web App name.
+      # - slot-name is usually Production (or Staging, etc).
+      # --------------------------------------------------------
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'gpt-resume-assistant'
           slot-name: 'Production'
-          
